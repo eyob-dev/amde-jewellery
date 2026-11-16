@@ -5,6 +5,7 @@ import { Plus, Trash, ArrowLeft, Image as ImageIcon, Palette, Edit2, X, Save, St
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import JewelleryProfileCards from '../components/admin/JewelleryProfileCards';
 
 /** Response shape of POST /api/admin/perfumes/import. */
 interface ImportReport {
@@ -153,9 +154,10 @@ export default function AdminPage() {
       body: JSON.stringify({ username, password })
     });
     const data = await res.json();
-    if (data.token) {
-      setToken(data.token);
-      localStorage.setItem('adminToken', data.token);
+    if (data.success) {
+      const sessionMarker = data.token ?? 'cookie-session';
+      setToken(sessionMarker);
+      localStorage.setItem('adminToken', sessionMarker);
     } else {
       alert('Login failed');
     }
@@ -763,7 +765,7 @@ export default function AdminPage() {
       <div className="min-h-screen flex items-center justify-center bg-[var(--color-paper)] p-4">
         <form onSubmit={handleLogin} className="bg-white p-8 rounded-[2rem] shadow-xl w-full max-w-md border border-gray-100">
           <div className="text-center mb-8">
-            <h1 className="text-4xl text-[#2f3b49] luxury-text font-bold uppercase tracking-widest mb-2">Lumiere</h1>
+            <h1 className="text-4xl text-[#2f3b49] luxury-text font-bold uppercase tracking-widest mb-2">AMDE JEWELLERY</h1>
             <p className="text-xs uppercase tracking-[0.2em] text-gray-400 font-bold">Admin Portal</p>
           </div>
           
@@ -805,12 +807,13 @@ export default function AdminPage() {
           <Link to="/" className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center hover:bg-gray-100 transition-colors border border-gray-200">
              <ArrowLeft size={18} className="text-gray-600" />
           </Link>
-          <h1 className="text-2xl text-[var(--color-dark)] luxury-text font-bold">Lumiere Admin</h1>
+          <h1 className="text-2xl text-[var(--color-dark)] luxury-text font-bold">AMDE JEWELLERY Admin</h1>
         </div>
         <button onClick={handleLogout} className="text-sm font-bold text-gray-500 hover:text-red-600 transition-colors">LOGOUT</button>
       </header>
 
       <main className="flex-1 p-8 max-w-7xl mx-auto w-full">
+        <JewelleryProfileCards token={token} />
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           
           {/* Accord Management Section */}

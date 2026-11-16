@@ -11,8 +11,10 @@ coverage/
 .env.*
 !.env.example
 
-# local databases & backups (live in %LOCALAPPDATA%\LumiereMenu)
+# local databases & backups
 *.db
+*.db-*
+*.sqlite
 backups/
 
 # logs

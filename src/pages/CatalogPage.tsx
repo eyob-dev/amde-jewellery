@@ -1,282 +1,368 @@
-import React, { useState, useEffect } from 'react';
-import Sidebar from '../components/layout/Sidebar';
-import TopTabs from '../components/layout/TopTabs';
-import { Category, Gender, getStockStatusForSize, Perfume } from '../lib/data';
-import { getCatalogCategorySetting, getCatalogSizePrice, getCatalogSizeUnit, usePerfumes, useCatalogImages, useCatalogSizeImages, useCategorySettings, resolveCatalogSizeImage } from '../lib/api';
-import PerfumeSlide from '../components/perfume/PerfumeSlide';
-import PerfumeDetailsModal from '../components/perfume/PerfumeDetailsModal';
-import { AnimatePresence, motion } from 'motion/react';
-import { Menu, ChevronLeft, Search, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  BookmarkCheck,
+  BookHeart,
+  Check,
+  ChevronRight,
+  Facebook,
+  Instagram,
+  MapPin,
+  Menu,
+  MessageCircle,
+  Moon,
+  Music2,
+  Phone,
+  Send,
+  Share2,
+  Sparkles,
+} from 'lucide-react';
+
+interface ProfileJewelleryCard {
+  id: string;
+  name: string;
+  description: string | null;
+  material: string | null;
+  images: { id: string; url: string; orderIndex: number }[];
+}
+
+const stats = [
+  { label: 'Small', value: '24' },
+  { label: 'Signature scents', value: '24' },
+  { label: 'Hand finished', value: '100%' },
+];
+
+const socialLinks = [
+  { label: 'Call', href: 'tel:+251911234567', icon: Phone, tone: 'bg-[#d0a85a]' },
+  { label: 'WhatsApp', href: 'https://wa.me/251911234567', icon: MessageCircle, tone: 'bg-[#57b6a5]' },
+  { label: 'Telegram', href: 'https://t.me/amdejewellery', icon: Send, tone: 'bg-[#5e9fe7]' },
+  { label: 'Instagram', href: 'https://instagram.com/amdejewellery', icon: Instagram, tone: 'bg-[#e88f8c]' },
+  { label: 'TikTok', href: 'https://www.tiktok.com/@amdejewellery', icon: Music2, tone: 'bg-[#f0b56f]' },
+  { label: 'Facebook', href: 'https://facebook.com/amdejewellery', icon: Facebook, tone: 'bg-[#7aa7d9]' },
+];
 
 export default function CatalogPage() {
-  const { perfumes, loading } = usePerfumes();
-  const { images: catalogImages } = useCatalogImages();
-  const { images: catalogSizeImages } = useCatalogSizeImages();
-  const { categories: categorySettings } = useCategorySettings();
-  const [activeCategory, setActiveCategory] = useState<Category | 'All'>('All');
-  const [activeGender, setActiveGender] = useState<Gender | 'All'>('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [direction, setDirection] = useState(0);
-  const [selectedPerfume, setSelectedPerfume] = useState<Perfume | null>(null);
-  const [selectedSizes, setSelectedSizes] = useState<Record<string, 1 | 2>>({});
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+  const [profileCards, setProfileCards] = useState<ProfileJewelleryCard[]>([]);
+  const [profileCardsLoading, setProfileCardsLoading] = useState(true);
+  const [profileCardsError, setProfileCardsError] = useState('');
+  const [notebookSessionId, setNotebookSessionId] = useState('');
+  const [savedProductIds, setSavedProductIds] = useState<Set<string>>(new Set());
+  const [savingProductId, setSavingProductId] = useState<string | null>(null);
+  const [notebookMessage, setNotebookMessage] = useState('');
 
-  const filteredPerfumes = perfumes.filter((perfume) => {
-    const categoryMatch = activeCategory === 'All' || perfume.category === activeCategory;
-    const genderMatch = activeGender === 'All' || perfume.gender === activeGender;
-    const q = searchQuery.trim().toLowerCase();
-    const searchMatch =
-      q === '' ||
-      perfume.name.toLowerCase().includes(q) ||
-      perfume.brand.toLowerCase().includes(q) ||
-      perfume.code.toLowerCase().includes(q);
-    return categoryMatch && genderMatch && searchMatch;
-  });
-
-  // Reset index when filters or search change
   useEffect(() => {
-    setCurrentIndex(0);
-  }, [activeCategory, activeGender, searchQuery]);
+    let active = true;
+    const loadProfile = async () => {
+      try {
+        let sessionId = localStorage.getItem('amdeNotebookSession');
+        if (!sessionId || !/^[a-f0-9]{32,64}$/i.test(sessionId)) {
+          const bytes = crypto.getRandomValues(new Uint8Array(16));
+          sessionId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+          localStorage.setItem('amdeNotebookSession', sessionId);
+        }
 
-  const handleNext = () => {
-    if (filteredPerfumes.length === 0) return;
-    setDirection(1);
-    setCurrentIndex((prev) => (prev + 1) % filteredPerfumes.length);
+        const [cardsResponse, notebookResponse] = await Promise.all([
+          fetch('/api/products?profileCards=1'),
+          fetch(`/api/notebook?sessionId=${encodeURIComponent(sessionId)}`),
+        ]);
+        if (!cardsResponse.ok || !notebookResponse.ok) {
+          throw new Error('Jewellery cards or notebook could not be loaded.');
+        }
+        const [cardsData, notebookData] = await Promise.all([
+          cardsResponse.json() as Promise<ProfileJewelleryCard[]>,
+          notebookResponse.json() as Promise<{ productId: string }[]>,
+        ]);
+        if (!active) return;
+        setNotebookSessionId(sessionId);
+        setProfileCards(Array.isArray(cardsData) ? cardsData.slice(0, 5) : []);
+        setSavedProductIds(new Set(Array.isArray(notebookData) ? notebookData.map((item) => item.productId) : []));
+      } catch (error) {
+        if (!active) return;
+        console.error('Failed to load profile jewellery:', error);
+        setProfileCardsError('Jewellery highlights are temporarily unavailable.');
+      } finally {
+        if (active) setProfileCardsLoading(false);
+      }
+    };
+
+    void loadProfile();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleNotebookSave = async (productId: string) => {
+    if (!notebookSessionId || savingProductId) return;
+    setSavingProductId(productId);
+    setNotebookMessage('');
+    try {
+      const saved = savedProductIds.has(productId);
+      const response = await fetch(
+        saved
+          ? `/api/notebook/${encodeURIComponent(productId)}?sessionId=${encodeURIComponent(notebookSessionId)}`
+          : '/api/notebook',
+        saved
+          ? { method: 'DELETE' }
+          : {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId: notebookSessionId, productId }),
+            }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not update your notebook.');
+
+      setSavedProductIds((current) => {
+        const next = new Set(current);
+        if (saved) next.delete(productId);
+        else next.add(productId);
+        return next;
+      });
+      setNotebookMessage(saved ? 'Removed from your notebook.' : 'Saved to your notebook.');
+    } catch (error) {
+      console.error('Failed to update notebook:', error);
+      setNotebookMessage(error instanceof Error ? error.message : 'Could not update your notebook.');
+    } finally {
+      setSavingProductId(null);
+    }
   };
 
-  const handlePrev = () => {
-    if (filteredPerfumes.length === 0) return;
-    setDirection(-1);
-    setCurrentIndex((prev) => (prev - 1 + filteredPerfumes.length) % filteredPerfumes.length);
-  };
+  const palette = useMemo(() => {
+    if (theme === 'dark') {
+      return {
+        page: 'bg-[#0b0b0b]',
+        shell: 'bg-[#171717]',
+        text: 'text-[#f5f0e6]',
+        muted: 'text-[#afa99c]',
+        pill: 'bg-[#f5f0e6]/10',
+        border: 'border-[#c6a15b]/40',
+        button: 'bg-[#d4af37] text-[#111111]',
+        secondary: 'bg-[#1c1b19] text-[#f5f0e6]',
+      };
+    }
 
-  const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? 1000 : -1000,
-      opacity: 0
-    }),
-    center: {
-      zIndex: 1,
-      x: 0,
-      opacity: 1
-    },
-    exit: (direction: number) => ({
-      zIndex: 0,
-      x: direction < 0 ? 1000 : -1000,
-      opacity: 0
-    })
-  };
-
-  const currentPerfume = filteredPerfumes[currentIndex];
-
-  const getStockBadgeClass = (status = 'In Stock') => {
-    if (status === 'Out Stock') return 'bg-red-50 text-red-700 border-red-200';
-    if (status === 'Low Stock') return 'bg-amber-50 text-amber-700 border-amber-200';
-    return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  };
-
-  const swipeConfidenceThreshold = 10000;
-  const swipePower = (offset: number, velocity: number) => {
-    return Math.abs(offset) * velocity;
-  };
+    return {
+      page: 'bg-[#f6f2ea]',
+      shell: 'bg-[#f4efe4]',
+      text: 'text-[#251f18]',
+      muted: 'text-[#81776a]',
+      pill: 'bg-[#efe7db]',
+      border: 'border-[#b99548]/40',
+      button: 'bg-[#b99548] text-[#fffaf0]',
+      secondary: 'bg-[#f4efe4] text-[#251f18]',
+    };
+  }, [theme]);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#dedede]">
-      {/* Sidebar Toggle Button for minimized mode */}
-      {!isSidebarOpen && (
-        <button 
-          onClick={() => setIsSidebarOpen(true)}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-30 bg-white p-2 rounded-full shadow-lg border border-gray-200"
-        >
-          <Menu size={20} />
-        </button>
-      )}
-
-      {/* Sidebar */}
-      <div className={isSidebarOpen ? 'block' : 'hidden lg:hidden'}>
-        <Sidebar 
-          activeCategory={activeCategory} 
-          setActiveCategory={setActiveCategory as any} 
-          categorySettings={categorySettings}
-          isOpen={isSidebarOpen}
-          setIsOpen={setIsSidebarOpen}
-        />
-      </div>
-
-      {/* Main Container */}
-      <main className="flex-1 flex flex-col min-h-0 relative bg-[#dedede] p-1.5 lg:p-2.5 overflow-hidden">
-        
-        {/* Top Header with Gender Tabs */}
-        <div className="flex items-center gap-2 lg:gap-4 mb-2 lg:mb-3 flex-shrink-0">
-          <button 
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="hidden lg:flex flex-shrink-0 items-center justify-center w-7 h-7 bg-white rounded-full shadow-md text-gray-400 hover:text-black transition-all hover:bg-gray-50 border border-gray-100"
-          >
-            <ChevronLeft size={16} className={isSidebarOpen ? 'transition-transform duration-300' : 'rotate-180 transition-transform duration-300'} />
-          </button>
-          
-          <div className="flex-1 overflow-x-auto lg:overflow-visible hide-scrollbar py-0.5">
-            <TopTabs activeGender={activeGender} setActiveGender={setActiveGender as any} />
+    <div className={`min-h-screen ${palette.page} px-4 py-6 transition-colors duration-300 sm:py-10`}>
+      <div className={`mx-auto max-w-[430px] overflow-hidden rounded-[28px] border ${palette.border} ${palette.shell} shadow-[0_20px_50px_rgba(35,27,18,0.12)]`}>
+        <header className="flex items-center justify-between px-4 pb-2 pt-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#d4af37]/70 bg-[#f9f1e1] text-lg font-serif text-[#1d1a17] shadow-inner">
+              <span className="translate-y-[-2px]">A</span>
+            </div>
+            <div className="font-serif text-[2rem] leading-none tracking-[-0.05em] text-[#1a1714]">
+              AMDE
+            </div>
           </div>
 
-          {/* Search Bar */}
-          <div className="relative flex-shrink-0 w-36 sm:w-52 lg:w-72">
-            <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search perfumes..."
-              className="w-full bg-white rounded-full shadow-md border border-gray-100 pl-9 pr-8 py-2 text-xs font-medium text-gray-700 placeholder-gray-400 outline-none focus:border-gray-300 focus:ring-2 focus:ring-black/5 transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                aria-label="Clear search"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
-              >
-                <X size={11} strokeWidth={3} />
-              </button>
-            )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-label="Toggle theme"
+              onClick={() => setTheme((current) => (current === 'light' ? 'dark' : 'light'))}
+              className={`flex h-10 w-10 items-center justify-center rounded-full border border-[#d9c7a7] bg-[#f5f0e7] text-[#1d1a17] shadow-sm`}
+            >
+              <Moon size={18} />
+            </button>
+            <button
+              type="button"
+              aria-label="Share profile"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[#d9c7a7] bg-[#f5f0e7] text-[#1d1a17] shadow-sm"
+            >
+              <Share2 size={18} />
+            </button>
+            <button
+              type="button"
+              aria-label="Menu"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-[#d9c7a7] bg-[#f5f0e7] text-[#1d1a17] shadow-sm"
+            >
+              <Menu size={18} />
+            </button>
           </div>
-        </div>
+        </header>
 
-        {/* Content Slider Area */}
-        <div className="flex-1 relative min-h-0">
-          <AnimatePresence initial={false} custom={direction}>
-            {loading ? (
-              <div key="loading" className="absolute inset-0 flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-[var(--color-gold)] border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : filteredPerfumes.length > 0 ? (
-              <motion.div
-                key="all-grid"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="absolute inset-0 overflow-y-auto hide-scrollbar sm:custom-scrollbar pb-20 px-2 lg:px-4"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6 pt-3 sm:pt-4">
-                  {filteredPerfumes.map(perfume => {
-                    const categorySetting = getCatalogCategorySetting(categorySettings, perfume.category, perfume.unit);
-                    const selectedSize = selectedSizes[perfume.id] ?? 1;
-                    const sizeLabel = categorySetting
-                      ? `${selectedSize === 1 ? categorySetting.size1 : categorySetting.size2} ${getCatalogSizeUnit(perfume, categorySetting)}`
-                      : '';
-                    const mainImage = resolveCatalogSizeImage(
-                      perfume,
-                      selectedSize,
-                      categorySetting,
-                      catalogSizeImages,
-                      catalogImages
-                    );
-                    const selectedPrice = categorySetting ? getCatalogSizePrice(perfume, categorySetting, selectedSize) : perfume.price;
-                    const selectedStockStatus = categorySetting
-                      ? getStockStatusForSize(perfume, selectedSize)
-                      : perfume.stockStatus;
+        <main className="px-4 pb-4">
+          <div className="flex items-center justify-center pb-2 pt-2">
+            <div className="relative flex h-36 w-36 items-center justify-center rounded-full border-[3px] border-[#d5b77e] bg-[#f3ead8] shadow-[inset_0_0_0_3px_rgba(255,255,255,0.4)]">
+              <div className="absolute inset-2 rounded-full border border-[#d4af37]/70" />
+              <span className="relative font-serif text-[5rem] leading-none tracking-[-0.08em] text-[#201d19]">
+                A
+              </span>
+            </div>
+          </div>
 
-                    return (
-                      <div 
-                        key={perfume.id} 
-                        onClick={() => {
-                          setSelectedPerfume(perfume);
-                        }}
-                        className="min-w-0 bg-white rounded-[1.5rem] p-3 sm:p-4 lg:p-5 flex flex-col items-center cursor-pointer shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all border border-gray-100"
-                      >
-                        <div className="w-full aspect-[4/5] bg-[#fcf9f2] rounded-xl overflow-hidden mb-4">
-                          <img
-                            key={`${perfume.id}-${selectedSize}-${mainImage}`}
-                            src={mainImage}
-                            alt={sizeLabel ? `${perfume.name} ${sizeLabel}` : perfume.name}
-                            /* Minimize the photo inside the card's fixed 4:5 image box:
-                               object-contain + padding scales any size-specific image
-                               down to fit the card instead of cropping/zooming it. */
-                            className="w-full h-full object-contain p-3"
-                          />
-                        </div>
-                        <div className="w-full text-left flex flex-col flex-1">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <div className="text-[9px] lg:text-[10px] font-bold text-gray-400 tracking-widest uppercase">
-                              {perfume.code}
-                            </div>
-                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] lg:text-[9px] font-bold uppercase tracking-widest ${getStockBadgeClass(selectedStockStatus)}`}>
-                              {selectedStockStatus || 'In Stock'}
-                            </span>
-                          </div>
-                          <h3 className="font-bold text-xs lg:text-sm text-[#1a2c3d] leading-tight mb-2 flex-1 line-clamp-2">
-                            {perfume.name}
-                          </h3>
-                          {categorySetting && (
-                            <div role="group" aria-label={`Choose bottle size for ${perfume.name}`} className="mb-2 grid grid-cols-2 gap-2">
-                              {([1, 2] as const).map(size => (
-                                <button
-                                  key={size}
-                                  type="button"
-                                  aria-pressed={selectedSize === size}
-                                  onClick={event => {
-                                    event.stopPropagation();
-                                    setSelectedSizes(previous => ({ ...previous, [perfume.id]: size }));
-                                  }}
-                                  className={`min-h-9 rounded-lg border px-2 py-2 text-xs font-bold transition-colors ${
-                                    selectedSize === size
-                                      ? 'border-black bg-black text-white'
-                                      : 'border-gray-200 bg-white text-gray-600 hover:border-gray-400'
-                                  }`}
-                                >
-                                  {size === 1 ? categorySetting.size1 : categorySetting.size2} {getCatalogSizeUnit(perfume, categorySetting)}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="mt-auto font-bold text-sm sm:text-base text-black">
-                            {categorySetting
-                              ? `${selectedPrice.toLocaleString()} ETB`
-                              : `${perfume.price.toLocaleString()} ETB`}
-                          </div>
-                          {categorySetting && getCatalogSizeUnit(perfume, categorySetting) === 'gram' && typeof perfume.pricePerGram === 'number' && (
-                            <div className="mt-0.5 text-[10px] font-medium text-gray-500">
-                              {perfume.pricePerGram.toLocaleString()} ETB / gram
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+          <div className="text-center">
+            <h1 className={`font-serif text-[3.2rem] leading-none tracking-[-0.06em] ${palette.text}`}>
+              AMDE JEWELLERY
+            </h1>
+
+            <div className="mt-3 flex items-center justify-center gap-2 text-[#a38148]">
+              <Check className="h-4 w-4" />
+            </div>
+
+            <p className={`mt-4 text-[0.95rem] italic ${palette.muted}`}>
+              @amdejewellery
+            </p>
+
+            <p className={`mt-3 font-serif text-[2.1rem] leading-none tracking-[-0.04em] ${palette.text}`}>
+              Timeless Elegance.
+            </p>
+            <p className={`font-serif text-[2.1rem] leading-none tracking-[-0.04em] ${palette.text}`}>
+              Beautifully Crafted.
+            </p>
+
+            <div className={`mt-6 flex items-center justify-center gap-3 rounded-full px-4 py-3 ${palette.pill} ${palette.text}`}>
+              <MapPin className="h-4 w-4" />
+              <span className="text-sm font-medium">Addis Ababa, Ethiopia</span>
+            </div>
+          </div>
+
+          <div className="mt-6 border-y border-[#8e7a58]/30 py-4">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              {stats.map((stat) => (
+                <div key={stat.label}>
+                  <div className={`font-serif text-[1.9rem] leading-none ${palette.text}`}>
+                    {stat.value}
+                  </div>
+                  <div className={`mt-2 text-[0.72rem] uppercase tracking-[0.14em] ${palette.muted}`}>
+                    {stat.label}
+                  </div>
                 </div>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="empty"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="absolute inset-0 flex flex-col items-center justify-center bg-white rounded-[2rem] shadow-xl text-center p-12"
-              >
-                 <p className="text-2xl luxury-text mb-4 text-[#1a2c3d]">No perfumes found for this selection.</p>
-                 <button 
-                  onClick={() => { setActiveCategory('All'); setActiveGender('All'); setSearchQuery(''); }}
-                  className="bg-black text-white px-10 py-4 rounded-full font-bold uppercase tracking-[0.2em] text-xs hover:bg-gray-800 transition-colors shadow-lg"
-                 >
-                   Reset Menu
-                 </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </main>
+              ))}
+            </div>
+          </div>
 
-      <AnimatePresence>
-        {selectedPerfume && (
-          <PerfumeDetailsModal 
-            perfume={selectedPerfume} 
-            categorySetting={getCatalogCategorySetting(categorySettings, selectedPerfume.category, selectedPerfume.unit)}
-            categorySizeImages={catalogSizeImages}
-            initialSize={selectedSizes[selectedPerfume.id] ?? 1}
-            onSizeChange={size => setSelectedSizes(previous => ({ ...previous, [selectedPerfume.id]: size }))}
-            onClose={() => setSelectedPerfume(null)} 
-          />
-        )}
-      </AnimatePresence>
+          <div className="mt-6 flex flex-wrap justify-center gap-4">
+            {socialLinks.map(({ label, href, icon: Icon, tone }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={label}
+                className={`flex h-14 w-14 items-center justify-center rounded-full shadow-sm transition hover:scale-105 ${tone} ${label === 'Call' ? 'text-[#1d1a17]' : 'text-white'}`}
+              >
+                <Icon size={28} />
+              </a>
+            ))}
+          </div>
+
+          <div className="mt-7 space-y-3">
+            <a
+              href="#jewellery-highlights"
+              className={`flex w-full items-center justify-center gap-3 rounded-[22px] px-5 py-4 text-lg font-semibold shadow-[0_10px_20px_rgba(0,0,0,0.08)] transition hover:translate-y-[-1px] ${palette.button}`}
+            >
+              <Sparkles size={18} />
+              Explore jewellery
+              <ChevronRight size={18} />
+            </a>
+
+            <a
+              href="tel:+251911234567"
+              className={`flex w-full items-center justify-center gap-3 rounded-[22px] border px-5 py-4 text-lg font-semibold transition hover:translate-y-[-1px] ${palette.secondary} ${palette.border}`}
+            >
+              <Phone size={18} />
+              Call the atelier
+            </a>
+          </div>
+
+          <section aria-labelledby="jewellery-highlights" className="mt-8">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-[#a38148]">
+                  AMDE collection
+                </p>
+                <h2 id="jewellery-highlights" className={`mt-1 font-serif text-2xl ${palette.text}`}>
+                  Jewellery highlights
+                </h2>
+              </div>
+              {profileCards.length > 0 && (
+                <span className={`text-xs ${palette.muted}`}>{profileCards.length} featured</span>
+              )}
+            </div>
+
+            {profileCardsLoading ? (
+              <div className={`rounded-2xl border ${palette.border} px-4 py-6 text-center text-sm ${palette.muted}`}>
+                Loading jewellery…
+              </div>
+            ) : profileCardsError ? (
+              <div role="status" className={`rounded-2xl border ${palette.border} px-4 py-6 text-center text-sm ${palette.muted}`}>
+                {profileCardsError}
+              </div>
+            ) : profileCards.length === 0 ? (
+              <div className={`rounded-2xl border ${palette.border} px-4 py-6 text-center text-sm ${palette.muted}`}>
+                Jewellery highlights will appear here soon.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {profileCards.map((card) => {
+                  const image = card.images?.[0]?.url;
+                  const saved = savedProductIds.has(card.id);
+                  return (
+                    <article key={card.id} className={`overflow-hidden rounded-2xl border ${palette.border} ${theme === 'dark' ? 'bg-[#1c1b19]' : 'bg-white'} shadow-sm`}>
+                      <div className="aspect-[1.65/1] overflow-hidden bg-[#f3eee4]">
+                        {image ? (
+                          <img src={image} alt={card.name} loading="lazy" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full items-center justify-center font-serif text-lg text-[#9a8865]">
+                            AMDE JEWELLERY
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className={`font-serif text-xl ${palette.text}`}>{card.name}</h3>
+                            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#a38148]">
+                              {card.material || 'Gold & Silver Jewellery'}
+                            </p>
+                          </div>
+                          <Sparkles size={17} className="mt-1 shrink-0 text-[#b99548]" aria-hidden="true" />
+                        </div>
+                        {card.description && (
+                          <p className={`mt-3 whitespace-pre-line text-sm leading-relaxed ${palette.muted}`}>
+                            {card.description}
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          disabled={!notebookSessionId || savingProductId === card.id}
+                          onClick={() => void handleNotebookSave(card.id)}
+                          aria-pressed={saved}
+                          className={`mt-4 flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition-colors disabled:opacity-60 ${
+                            saved
+                              ? 'border-[#b99548] bg-[#f4efe4] text-[#795d2e]'
+                              : `${palette.border} ${palette.secondary}`
+                          }`}
+                        >
+                          {saved ? <BookmarkCheck size={17} /> : <BookHeart size={17} />}
+                          {savingProductId === card.id ? 'Saving…' : saved ? 'Saved to notebook' : 'Save to notebook'}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+            {notebookMessage && (
+              <p role="status" className={`mt-3 text-center text-xs ${palette.muted}`}>
+                {notebookMessage}
+              </p>
+            )}
+          </section>
+        </main>
+      </div>
     </div>
   );
 }
