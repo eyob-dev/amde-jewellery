@@ -63,9 +63,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN?.trim() || '';
 const TELEGRAM_OWNER_CHAT_ID = process.env.TELEGRAM_OWNER_CHAT_ID?.trim() || '';
 const TELEGRAM_CONFIGURED = TELEGRAM_BOT_TOKEN.length > 0 && TELEGRAM_OWNER_CHAT_ID.length > 0;
 
-const DB_PATH = process.env.DB_PATH?.trim() || (process.env.VERCEL
-  ? '/tmp/amde-jewellery.db'
-  : path.join(process.cwd(), 'data', 'amde-jewellery.db'));
+const DB_PATH = process.env.DB_PATH?.trim() || path.join(process.cwd(), 'data', 'amde-jewellery.db');
 const dbDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
