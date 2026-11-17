@@ -12,9 +12,9 @@ coverage/
 !.env.example
 
 # local databases & backups
-*.db
-*.db-*
-*.sqlite
+# *.db
+# *.db-*
+# *.sqlite
 backups/
 
 # logs
