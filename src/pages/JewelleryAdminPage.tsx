@@ -189,6 +189,8 @@ export default function JewelleryAdminPage() {
   };
 
   const login = async (event: FormEvent<HTMLFormElement>) => {
+    console.log("username", username)
+    console.log("password", password)
     event.preventDefault();
     setBusy(true);
     setLoginError('');
@@ -197,6 +199,7 @@ export default function JewelleryAdminPage() {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       });
+      console.log(data);
       if (!data.success) throw new Error(data.error || 'Invalid username or password.');
       sessionStorage.setItem('amdeAdminSignedIn', 'true');
       setPassword('');

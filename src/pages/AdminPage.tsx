@@ -153,6 +153,7 @@ export default function AdminPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
+    console.log(res.body)
     const data = await res.json();
     if (data.success) {
       const sessionMarker = data.token ?? 'cookie-session';
