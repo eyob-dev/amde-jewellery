@@ -64,6 +64,8 @@ export default function JewelleryAdminPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [dbHealth, setDbHealth] = useState<{ ok: boolean; message: string } | null>(null);
+  const [dbChecking, setDbChecking] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -212,6 +214,24 @@ export default function JewelleryAdminPage() {
     }
   };
 
+  const checkDatabase = async () => {
+    setDbChecking(true);
+    setDbHealth(null);
+    try {
+      const response = await fetch('/api/health', { credentials: 'same-origin' });
+      const data = await response.json().catch(() => ({}));
+      console.log("Database health check response:", data);
+      if (response.ok && data.status === 'ok') {
+        setDbHealth({ ok: true, message: `Database reachable (${data.database ?? 'sqlite'}).` });
+      } else {
+        setDbHealth({ ok: false, message: data.error || `Database check failed (HTTP ${response.status}).` });
+      }
+    } catch (err) {
+      setDbHealth({ ok: false, message: err instanceof Error ? err.message : 'Could not reach the server.' });
+    } finally {
+      setDbChecking(false);
+    }
+  };
   const logout = async () => {
     try {
       await api('/api/auth/logout', { method: 'POST' });
@@ -221,7 +241,6 @@ export default function JewelleryAdminPage() {
     sessionStorage.removeItem('amdeAdminSignedIn');
     setAuthenticated(false);
   };
-
   const mutateRecord = <T extends ApiRecord>(records: T[], setRecords: (rows: T[]) => void, id: string, values: Partial<T>) => {
     setRecords(records.map((record) => record.id === id ? { ...record, ...values } : record));
   };
@@ -245,6 +264,10 @@ export default function JewelleryAdminPage() {
           {loginError && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{loginError}</p>}
           <Field label="Username"><input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} className={inputClass} /></Field>
           <Field label="Password"><input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className={inputClass} /></Field>
+          <button type="button" disabled={busy || dbChecking} className={`mt-2 w-full ${dbHealth?.ok ? 'bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed' : 'border border-[#dfd8cc] bg-white px-4 py-2 text-sm font-semibold text-[#40392f] transition hover:bg-[#f8f5ef] disabled:opacity-50 disabled:cursor-not-allowed'} rounded-xl inline-flex items-center justify-center gap-2 min-h-10`} onClick={() => void checkDatabase()}>
+            {dbChecking ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} />}{dbChecking ? ' Checking…' : ' Check database connection'}
+          </button>
+          {dbHealth && <p role="status" className={`mt-2 text-sm text-center ${dbHealth.ok ? 'text-green-800' : 'text-red-700'}`}>{dbHealth.message}</p>}
           <button type="submit" disabled={busy} className={`${buttonClass} mt-5 w-full`}>{busy ? 'Signing in…' : 'Sign in securely'}</button>
         </form>
       </div>
